@@ -80,7 +80,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
         return false;
     }
 
-    function _createViewport(width, height, page) {
+    function _createViewport(width, height, page, dpiRatio) {
         var actualWidth = page.pageInfo.view[2];
         var actualHeight = page.pageInfo.view[3];
 
@@ -89,12 +89,12 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 
         if (typeof(width)=='number' && typeof(height)!='number') {
             scale = width/actualWidth;
-            viewport = page.getViewport(scale);
+            viewport = page.getViewport(scale * dpiRatio);
             return viewport;
         }
         if (typeof(width)!='number' && typeof(height)=='number') {
             scale = height/actualHeight;
-            viewport = page.getViewport(scale);
+            viewport = page.getViewport(scale * dpiRatio);
             return viewport;
         }
         // This one is special. Specifying a  width & height means setting bounds. Both are tested and the
@@ -103,13 +103,13 @@ var FormFunctionality = (function FormFunctionalityClosure() {
             scale = height/actualHeight;
             if (scale*actualWidth>width) { // too big, use other dimension's scale
                 scale = width/actualWidth;
-                viewport = page.getViewport(scale);
+                viewport = page.getViewport(scale * dpiRatio);
                 return viewport;
             }
-            viewport = page.getViewport(scale);
+            viewport = page.getViewport(scale * dpiRatio);
             return viewport;
         }
-        viewport = page.getViewport(1);
+        viewport = page.getViewport(dpiRatio);
         return viewport;
     }
 
@@ -162,12 +162,10 @@ var FormFunctionality = (function FormFunctionalityClosure() {
         };
         if (item.fullName.indexOf('.`')!=-1) {
             prop.correctedId = item.fullName.substring(0,item.fullName.indexOf('.`'));
-            prop.groupingId = item.fullName.substring(item.fullName.indexOf('.`')+2);
             prop.isGroupMember = true;
         }
         else {
             prop.correctedId = item.fullName;
-            prop.groupingId = 0;
             prop.isGroupMember = false;
         }
         try {
@@ -217,15 +215,24 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 
     function _getCheckBoxProperties(item, viewport, values, basicData) {
         var selected = item.selected;
-        if (basicData.id in values) {
-            if (values[basicData.id]) {
-                selected = true;
-            }
-            else {
-                selected = false;
-            }
-        }
+		var v = values[basicData.id];
+		switch (typeof v)
+		{
+			case "string":
+			{
+				// We were passed a string, chances are this person knows the export_value
+				selected = (item.options.indexOf(v)>0);		// 2nd option is the "checked" state
+				break;
+			}
+			case "boolean":
+			{
+				// We were passed a boolean, just use it as is
+				selected = v;
+				break;
+			}
+		}
         return {
+			options: item.options,
             selected: selected,
             readOnly: item.readOnly,
         };
@@ -238,14 +245,11 @@ var FormFunctionality = (function FormFunctionalityClosure() {
     function _getRadioButtonProperties(item, viewport, values, basicData) {
         var selected = item.selected;
         if (basicData.correctedId in values) {
-            if (values[basicData.correctedId]==basicData.groupingId) {
-                selected = true;
-            }
-            else {
-                selected = false;
-            }
+			var v = values[basicData.correctedId];
+			selected = (item.options.indexOf(v)>0);
         }
         return {
+			options: item.options,
             selected: selected,
             readOnly: item.readOnly,
         };
@@ -330,8 +334,8 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 
 	defaultCreationRoutines[fieldTypes.CHECK_BOX] = function(itemProperties, viewport) {
 		var control = document.createElement('input');
-		control.type='checkbox';
-		control.value = 1; // do not believe checkboxs have values in pdfs
+		control.type = 'checkbox';
+		control.value = itemProperties.options[1];		// Checkboxes are often Off/Yes, however this is a custom field controlled by export_value
 		control.style.padding = '0';
 		control.style.margin = '0';
 		control.style.marginLeft = itemProperties.width/2-Math.ceil(4*viewport.scale)+'px';
@@ -344,8 +348,8 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 
 	defaultCreationRoutines[fieldTypes.RADIO_BUTTON] = function(itemProperties, viewport) {
 		var control = document.createElement('input');
-		control.type='radio';
-		control.value = itemProperties.groupingId;		// Value is in index (matches PDF)
+		control.type = 'radio';
+		control.value = itemProperties.options[1];		// Radio buttons have an Off/Yes style value, however Yes is usually a unique ID unless grouping is turned on
 		control.name = itemProperties.correctedId;		// Name is used to group radio buttons
 		control.style.padding = '0';
 		control.style.margin = '0';
@@ -682,7 +686,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
             //
             // Get viewport
             //
-            var viewport = _createViewport(width, height, page);
+            var viewport = _createViewport(width, height, page, 1.0);
             //
             // Page Holder
             //
@@ -702,14 +706,28 @@ var FormFunctionality = (function FormFunctionalityClosure() {
             pageHolder.appendChild(canvas);
             canvas.height = viewport.height;
             canvas.width = viewport.width;
+						 
+			// Tweak canvas to support hi-dpi rendering (without affecting the form fields positioning)
+			var context = canvas.getContext('2d');
+			var devicePixelRatio = window.devicePixelRatio || 1;
+			var backingStoreRatio = context.webkitBackingStorePixelRatio ||
+									context.mozBackingStorePixelRatio ||
+									context.msBackingStorePixelRatio ||
+									context.oBackingStorePixelRatio ||
+									context.backingStorePixelRatio || 1;
+			var ratio = devicePixelRatio / backingStoreRatio;
+			canvas.style.width = canvas.width + "px";
+			canvas.style.height = canvas.height + "px";
+			canvas.width = canvas.width * ratio;
+			canvas.height = canvas.height * ratio;
 			if (postCreationTweak) postCreationTweak("CANVAS","canvas",canvas);
+						 
             //
             // Render PDF page into canvas context
             //
-            var context = canvas.getContext('2d');
             var renderContext = {
                 canvasContext: context,
-                viewport: viewport,
+                viewport: _createViewport(width, height, page, ratio),
 				intent: doForm ? "display" : "print",
             };
 			// Render the page, and optionally the forms overlay
