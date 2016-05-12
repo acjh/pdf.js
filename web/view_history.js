@@ -15,6 +15,16 @@
 
 'use strict';
 
+(function (root, factory) {
+  if (typeof define === 'function' && define.amd) {
+    define('pdfjs-web/view_history', ['exports'], factory);
+  } else if (typeof exports !== 'undefined') {
+    factory(exports);
+  } else {
+    factory((root.pdfjsWebViewHistory = {}));
+  }
+}(this, function (exports) {
+
 var DEFAULT_VIEW_HISTORY_CACHE_SIZE = 20;
 
 /**
@@ -22,7 +32,7 @@ var DEFAULT_VIEW_HISTORY_CACHE_SIZE = 20;
  *                recently opened files.
  *
  * The way that the view parameters are stored depends on how PDF.js is built,
- * for 'node make <flag>' the following cases exist:
+ * for 'gulp <flag>' the following cases exist:
  *  - FIREFOX or MOZCENTRAL - uses sessionStorage.
  *  - GENERIC or CHROME     - uses localStorage, if it is available.
  */
@@ -115,3 +125,6 @@ var ViewHistory = (function ViewHistoryClosure() {
 
   return ViewHistory;
 })();
+
+exports.ViewHistory = ViewHistory;
+}));

@@ -1,10 +1,9 @@
 /* globals expect, it, describe, beforeEach, Name, Dict, Ref, RefSet, Cmd,
-           jasmine */
+           jasmine, isDict */
 
 'use strict';
 
 describe('primitives', function() {
-
   describe('Name', function() {
     it('should retain the given name', function() {
       var givenName = 'Font';
@@ -16,7 +15,7 @@ describe('primitives', function() {
   describe('Cmd', function() {
     it('should retain the given cmd name', function() {
       var givenCmd = 'BT';
-      var cmd = new Cmd(givenCmd);
+      var cmd = Cmd.get(givenCmd);
       expect(cmd.cmd).toEqual(givenCmd);
     });
 
@@ -110,11 +109,12 @@ describe('primitives', function() {
 
       dictWithManyKeys.forEach(callbackSpy);
 
-      expect(callbackSpy).wasCalled();
-      expect(callbackSpy.argsForCall[0]).toEqual(['FontFile', testFontFile]);
-      expect(callbackSpy.argsForCall[1]).toEqual(['FontFile2', testFontFile2]);
-      expect(callbackSpy.argsForCall[2]).toEqual(['FontFile3', testFontFile3]);
-      expect(callbackSpy.callCount).toEqual(3);
+      expect(callbackSpy).toHaveBeenCalled();
+      var callbackSpyCalls = callbackSpy.calls;
+      expect(callbackSpyCalls.argsFor(0)).toEqual(['FontFile', testFontFile]);
+      expect(callbackSpyCalls.argsFor(1)).toEqual(['FontFile2', testFontFile2]);
+      expect(callbackSpyCalls.argsFor(2)).toEqual(['FontFile3', testFontFile3]);
+      expect(callbackSpyCalls.count()).toEqual(3);
     });
   });
 
@@ -143,6 +143,19 @@ describe('primitives', function() {
       refset.put(ref);
       var anotherRef = new Ref(2, 4);
       expect(refset.has(anotherRef)).toBeFalsy();
+    });
+  });
+
+  describe('isDict', function() {
+    it('handles empty dictionaries with type check', function() {
+      var dict = new Dict();
+      expect(isDict(dict, 'Page')).toEqual(false);
+    });
+
+    it('handles dictionaries with type check', function() {
+      var dict = new Dict();
+      dict.set('Type', Name.get('Page'));
+      expect(isDict(dict, 'Page')).toEqual(true);
     });
   });
 });

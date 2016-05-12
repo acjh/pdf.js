@@ -15,9 +15,20 @@
 
 'use strict';
 
-var PDFHistory = (function () {
+(function (root, factory) {
+  if (typeof define === 'function' && define.amd) {
+    define('pdfjs-web/pdf_history', ['exports', 'pdfjs-web/dom_events'],
+      factory);
+  } else if (typeof exports !== 'undefined') {
+    factory(exports, require('./dom_events.js'));
+  } else {
+    factory((root.pdfjsWebPDFHistory = {}), root.pdfjsWebDOMEvents);
+  }
+}(this, function (exports, domEvents) {
+
   function PDFHistory(options) {
     this.linkService = options.linkService;
+    this.eventBus = options.eventBus || domEvents.getGlobalEventBus();
 
     this.initialized = false;
     this.initialDestination = null;
@@ -27,7 +38,6 @@ var PDFHistory = (function () {
   PDFHistory.prototype = {
     /**
      * @param {string} fingerprint
-     * @param {IPDFLinkService} linkService
      */
     initialize: function pdfHistoryInitialize(fingerprint) {
       this.initialized = true;
@@ -164,8 +174,8 @@ var PDFHistory = (function () {
         window.addEventListener('beforeunload', pdfHistoryBeforeUnload, false);
       }, false);
 
-      window.addEventListener('presentationmodechanged', function(e) {
-        self.isViewerInPresentationMode = !!e.detail.active;
+      self.eventBus.on('presentationmodechanged', function(e) {
+        self.isViewerInPresentationMode = e.active;
       });
     },
 
@@ -423,5 +433,5 @@ var PDFHistory = (function () {
     }
   };
 
-  return PDFHistory;
-})();
+  exports.PDFHistory = PDFHistory;
+}));

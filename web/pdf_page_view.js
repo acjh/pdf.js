@@ -12,16 +12,38 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* globals RenderingStates, PDFJS, DEFAULT_SCALE, CSS_UNITS, getOutputScale,
-           TextLayerBuilder, Promise, approximateFraction, roundToDivide */
 
 'use strict';
+
+(function (root, factory) {
+  if (typeof define === 'function' && define.amd) {
+    define('pdfjs-web/pdf_page_view', ['exports',
+      'pdfjs-web/ui_utils', 'pdfjs-web/pdf_rendering_queue',
+      'pdfjs-web/dom_events', 'pdfjs-web/pdfjs'], factory);
+  } else if (typeof exports !== 'undefined') {
+    factory(exports, require('./ui_utils.js'),
+      require('./pdf_rendering_queue.js'), require('./dom_events.js'),
+      require('./pdfjs.js'));
+  } else {
+    factory((root.pdfjsWebPDFPageView = {}), root.pdfjsWebUIUtils,
+      root.pdfjsWebPDFRenderingQueue, root.pdfjsWebDOMEvents,
+      root.pdfjsWebPDFJS);
+  }
+}(this, function (exports, uiUtils, pdfRenderingQueue, domEvents, pdfjsLib) {
+
+var CSS_UNITS = uiUtils.CSS_UNITS;
+var DEFAULT_SCALE = uiUtils.DEFAULT_SCALE;
+var getOutputScale = uiUtils.getOutputScale;
+var approximateFraction = uiUtils.approximateFraction;
+var roundToDivide = uiUtils.roundToDivide;
+var RenderingStates = pdfRenderingQueue.RenderingStates;
 
 var TEXT_LAYER_RENDER_DELAY = 200; // ms
 
 /**
  * @typedef {Object} PDFPageViewOptions
  * @property {HTMLDivElement} container - The viewer element.
+ * @property {EventBus} eventBus - The application event bus.
  * @property {number} id - The page unique ID (normally its number).
  * @property {number} scale - The page scale display.
  * @property {PageViewport} defaultViewport - The page viewport.
@@ -57,6 +79,7 @@ var PDFPageView = (function PDFPageViewClosure() {
     this.pdfPageRotate = defaultViewport.rotation;
     this.hasRestrictedScaling = false;
 
+    this.eventBus = options.eventBus || domEvents.getGlobalEventBus();
     this.renderingQueue = renderingQueue;
     this.textLayerFactory = textLayerFactory;
     this.annotationLayerFactory = annotationLayerFactory;
@@ -162,29 +185,26 @@ var PDFPageView = (function PDFPageViewClosure() {
       });
 
       var isScalingRestricted = false;
-      if (this.canvas && PDFJS.maxCanvasPixels > 0) {
+      if (this.canvas && pdfjsLib.PDFJS.maxCanvasPixels > 0) {
         var outputScale = this.outputScale;
         var pixelsInViewport = this.viewport.width * this.viewport.height;
-        var maxScale = Math.sqrt(PDFJS.maxCanvasPixels / pixelsInViewport);
         if (((Math.floor(this.viewport.width) * outputScale.sx) | 0) *
             ((Math.floor(this.viewport.height) * outputScale.sy) | 0) >
-            PDFJS.maxCanvasPixels) {
+            pdfjsLib.PDFJS.maxCanvasPixels) {
           isScalingRestricted = true;
         }
       }
 
       if (this.canvas) {
-        if (PDFJS.useOnlyCssZoom ||
+        if (pdfjsLib.PDFJS.useOnlyCssZoom ||
             (this.hasRestrictedScaling && isScalingRestricted)) {
           this.cssTransform(this.canvas, true);
 
-          var event = document.createEvent('CustomEvent');
-          event.initCustomEvent('pagerendered', true, true, {
+          this.eventBus.dispatch('pagerendered', {
+            source: this,
             pageNumber: this.id,
             cssTransform: true,
           });
-          this.div.dispatchEvent(event);
-
           return;
         }
         if (!this.zoomLayer) {
@@ -208,7 +228,7 @@ var PDFPageView = (function PDFPageViewClosure() {
     },
 
     cssTransform: function PDFPageView_transform(canvas, redrawAnnotations) {
-      var CustomStyle = PDFJS.CustomStyle;
+      var CustomStyle = pdfjsLib.CustomStyle;
 
       // Scale canvas, canvas wrapper, and page container.
       var width = this.viewport.width;
@@ -330,7 +350,7 @@ var PDFPageView = (function PDFPageViewClosure() {
       var outputScale = getOutputScale(ctx);
       this.outputScale = outputScale;
 
-      if (PDFJS.useOnlyCssZoom) {
+      if (pdfjsLib.PDFJS.useOnlyCssZoom) {
         var actualSizeViewport = viewport.clone({scale: CSS_UNITS});
         // Use a scale that will make the canvas be the original intended size
         // of the page.
@@ -339,9 +359,10 @@ var PDFPageView = (function PDFPageViewClosure() {
         outputScale.scaled = true;
       }
 
-      if (PDFJS.maxCanvasPixels > 0) {
+      if (pdfjsLib.PDFJS.maxCanvasPixels > 0) {
         var pixelsInViewport = viewport.width * viewport.height;
-        var maxScale = Math.sqrt(PDFJS.maxCanvasPixels / pixelsInViewport);
+        var maxScale =
+          Math.sqrt(pdfjsLib.PDFJS.maxCanvasPixels / pixelsInViewport);
         if (outputScale.sx > maxScale || outputScale.sy > maxScale) {
           outputScale.sx = maxScale;
           outputScale.sy = maxScale;
@@ -422,7 +443,12 @@ var PDFPageView = (function PDFPageViewClosure() {
           zoomLayerCanvas.width = 0;
           zoomLayerCanvas.height = 0;
 
-          div.removeChild(self.zoomLayer);
+          if (div.contains(self.zoomLayer)) {
+            // Prevent "Node was not found" errors if the `zoomLayer` was
+            // already removed. This may occur intermittently if the scale
+            // changes many times in very quick succession.
+            div.removeChild(self.zoomLayer);
+          }
           self.zoomLayer = null;
         }
 
@@ -431,21 +457,11 @@ var PDFPageView = (function PDFPageViewClosure() {
         if (self.onAfterDraw) {
           self.onAfterDraw();
         }
-        var event = document.createEvent('CustomEvent');
-        event.initCustomEvent('pagerendered', true, true, {
+        self.eventBus.dispatch('pagerendered', {
+          source: self,
           pageNumber: self.id,
           cssTransform: false,
         });
-        div.dispatchEvent(event);
-//#if GENERIC
-        // This custom event is deprecated, and will be removed in the future,
-        // please use the |pagerendered| event instead.
-        var deprecatedEvent = document.createEvent('CustomEvent');
-        deprecatedEvent.initCustomEvent('pagerender', true, true, {
-          pageNumber: pdfPage.pageNumber
-        });
-        div.dispatchEvent(deprecatedEvent);
-//#endif
 
         if (!error) {
           resolveRenderPromise(undefined);
@@ -516,8 +532,8 @@ var PDFPageView = (function PDFPageViewClosure() {
       return promise;
     },
 
-    beforePrint: function PDFPageView_beforePrint() {
-      var CustomStyle = PDFJS.CustomStyle;
+    beforePrint: function PDFPageView_beforePrint(printContainer) {
+      var CustomStyle = pdfjsLib.CustomStyle;
       var pdfPage = this.pdfPage;
 
       var viewport = pdfPage.getViewport(1);
@@ -532,17 +548,13 @@ var PDFPageView = (function PDFPageViewClosure() {
 
       // The rendered size of the canvas, relative to the size of canvasWrapper.
       canvas.style.width = (PRINT_OUTPUT_SCALE * 100) + '%';
-      canvas.style.height = (PRINT_OUTPUT_SCALE * 100) + '%';
 
       var cssScale = 'scale(' + (1 / PRINT_OUTPUT_SCALE) + ', ' +
                                 (1 / PRINT_OUTPUT_SCALE) + ')';
       CustomStyle.setProp('transform' , canvas, cssScale);
       CustomStyle.setProp('transformOrigin' , canvas, '0% 0%');
 
-      var printContainer = document.getElementById('printContainer');
       var canvasWrapper = document.createElement('div');
-      canvasWrapper.style.width = viewport.width + 'pt';
-      canvasWrapper.style.height = viewport.height + 'pt';
       canvasWrapper.appendChild(canvas);
       printContainer.appendChild(canvasWrapper);
 
@@ -585,3 +597,6 @@ var PDFPageView = (function PDFPageViewClosure() {
 
   return PDFPageView;
 })();
+
+exports.PDFPageView = PDFPageView;
+}));

@@ -12,9 +12,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* globals PDFJS */
 
 'use strict';
+
+(function (root, factory) {
+  if (typeof define === 'function' && define.amd) {
+    define('pdfjs-web/pdf_outline_viewer', ['exports', 'pdfjs-web/pdfjs'],
+      factory);
+  } else if (typeof exports !== 'undefined') {
+    factory(exports, require('./pdfjs.js'));
+  } else {
+    factory((root.pdfjsWebPDFOutlineViewer = {}), root.pdfjsWebPDFJS);
+  }
+}(this, function (exports, pdfjsLib) {
 
 var DEFAULT_TITLE = '\u2013';
 
@@ -22,6 +32,7 @@ var DEFAULT_TITLE = '\u2013';
  * @typedef {Object} PDFOutlineViewerOptions
  * @property {HTMLDivElement} container - The viewer element.
  * @property {IPDFLinkService} linkService - The navigation/linking service.
+ * @property {EventBus} eventBus - The application event bus.
  */
 
 /**
@@ -42,6 +53,7 @@ var PDFOutlineViewer = (function PDFOutlineViewerClosure() {
     this.lastToggleIsShow = true;
     this.container = options.container;
     this.linkService = options.linkService;
+    this.eventBus = options.eventBus;
   }
 
   PDFOutlineViewer.prototype = {
@@ -59,11 +71,10 @@ var PDFOutlineViewer = (function PDFOutlineViewerClosure() {
      * @private
      */
     _dispatchEvent: function PDFOutlineViewer_dispatchEvent(outlineCount) {
-      var event = document.createEvent('CustomEvent');
-      event.initCustomEvent('outlineloaded', true, true, {
+      this.eventBus.dispatch('outlineloaded', {
+        source: this,
         outlineCount: outlineCount
       });
-      this.container.dispatchEvent(event);
     },
 
     /**
@@ -71,7 +82,7 @@ var PDFOutlineViewer = (function PDFOutlineViewerClosure() {
      */
     _bindLink: function PDFOutlineViewer_bindLink(element, item) {
       if (item.url) {
-        PDFJS.addLinkAttributes(element, { url: item.url });
+        pdfjsLib.addLinkAttributes(element, { url: item.url });
         return;
       }
       var linkService = this.linkService;
@@ -124,7 +135,7 @@ var PDFOutlineViewer = (function PDFOutlineViewerClosure() {
      * Toggle the visibility of the subtree of an outline item.
      *
      * @param {Element} root - the root of the outline (sub)tree.
-     * @param {boolean} state - whether to show the outline (sub)tree. If false,
+     * @param {boolean} show - whether to show the outline (sub)tree. If false,
      *   the outline subtree rooted at |root| will be collapsed.
      *
      * @private
@@ -180,7 +191,7 @@ var PDFOutlineViewer = (function PDFOutlineViewerClosure() {
           this._bindLink(element, item);
           this._setStyles(element, item);
           element.textContent =
-            PDFJS.removeNullCharacters(item.title) || DEFAULT_TITLE;
+            pdfjsLib.removeNullCharacters(item.title) || DEFAULT_TITLE;
 
           div.appendChild(element);
 
@@ -210,3 +221,6 @@ var PDFOutlineViewer = (function PDFOutlineViewerClosure() {
 
   return PDFOutlineViewer;
 })();
+
+exports.PDFOutlineViewer = PDFOutlineViewer;
+}));

@@ -15,6 +15,16 @@
 
 'use strict';
 
+(function (root, factory) {
+  if (typeof define === 'function' && define.amd) {
+    define('pdfjs-web/ui_utils', ['exports', 'pdfjs-web/pdfjs'], factory);
+  } else if (typeof exports !== 'undefined') {
+    factory(exports, require('./pdfjs.js'));
+  } else {
+    factory((root.pdfjsWebUIUtils = {}), root.pdfjsWebPDFJS);
+  }
+}(this, function (exports, pdfjsLib) {
+
 var CSS_UNITS = 96.0 / 72.0;
 var DEFAULT_SCALE_VALUE = 'auto';
 var DEFAULT_SCALE = 1.0;
@@ -22,6 +32,61 @@ var UNKNOWN_SCALE = 0;
 var MAX_AUTO_SCALE = 1.25;
 var SCROLLBAR_PADDING = 40;
 var VERTICAL_PADDING = 5;
+
+var mozL10n = document.mozL10n || document.webL10n;
+
+var PDFJS = pdfjsLib.PDFJS;
+
+/**
+ * Disables fullscreen support, and by extension Presentation Mode,
+ * in browsers which support the fullscreen API.
+ * @var {boolean}
+ */
+PDFJS.disableFullscreen = (PDFJS.disableFullscreen === undefined ?
+                           false : PDFJS.disableFullscreen);
+
+/**
+ * Enables CSS only zooming.
+ * @var {boolean}
+ */
+PDFJS.useOnlyCssZoom = (PDFJS.useOnlyCssZoom === undefined ?
+                        false : PDFJS.useOnlyCssZoom);
+
+/**
+ * The maximum supported canvas size in total pixels e.g. width * height.
+ * The default value is 4096 * 4096. Use -1 for no limit.
+ * @var {number}
+ */
+PDFJS.maxCanvasPixels = (PDFJS.maxCanvasPixels === undefined ?
+                         16777216 : PDFJS.maxCanvasPixels);
+
+/**
+ * Disables saving of the last position of the viewed PDF.
+ * @var {boolean}
+ */
+PDFJS.disableHistory = (PDFJS.disableHistory === undefined ?
+                        false : PDFJS.disableHistory);
+
+/**
+ * Disables creation of the text layer that used for text selection and search.
+ * @var {boolean}
+ */
+PDFJS.disableTextLayer = (PDFJS.disableTextLayer === undefined ?
+                          false : PDFJS.disableTextLayer);
+
+/**
+ * Disables maintaining the current position in the document when zooming.
+ */
+PDFJS.ignoreCurrentPositionOnZoom = (PDFJS.ignoreCurrentPositionOnZoom ===
+  undefined ? false : PDFJS.ignoreCurrentPositionOnZoom);
+
+//#if !(FIREFOX || MOZCENTRAL)
+/**
+ * Interface locale settings.
+ * @var {string}
+ */
+PDFJS.locale = (PDFJS.locale === undefined ? navigator.language : PDFJS.locale);
+//#endif
 
 /**
  * Returns scale factor for the canvas. It makes sense for the HiDPI displays.
@@ -319,6 +384,49 @@ function getPDFFileNameFromURL(url) {
   return suggestedFilename || 'document.pdf';
 }
 
+/**
+ * Simple event bus for an application. Listeners are attached using the
+ * `on` and `off` methods. To raise an event, the `dispatch` method shall be
+ * used.
+ */
+var EventBus = (function EventBusClosure() {
+  function EventBus() {
+    this._listeners = Object.create(null);
+  }
+  EventBus.prototype = {
+    on: function EventBus_on(eventName, listener) {
+      var eventListeners = this._listeners[eventName];
+      if (!eventListeners) {
+        eventListeners = [];
+        this._listeners[eventName] = eventListeners;
+      }
+      eventListeners.push(listener);
+    },
+    off: function EventBus_on(eventName, listener) {
+      var eventListeners = this._listeners[eventName];
+      var i;
+      if (!eventListeners || ((i = eventListeners.indexOf(listener)) < 0)) {
+        return;
+      }
+      eventListeners.splice(i, 1);
+    },
+    dispatch: function EventBus_dispath(eventName) {
+      var eventListeners = this._listeners[eventName];
+      if (!eventListeners || eventListeners.length === 0) {
+        return;
+      }
+      // Passing all arguments after the eventName to the listeners.
+      var args = Array.prototype.slice.call(arguments, 1);
+      // Making copy of the listeners array in case if it will be modified
+      // during dispatch.
+      eventListeners.slice(0).forEach(function (listener) {
+        listener.apply(null, args);
+      });
+    }
+  };
+  return EventBus;
+})();
+
 var ProgressBar = (function ProgressBarClosure() {
 
   function clamp(v, min, max) {
@@ -400,3 +508,25 @@ var ProgressBar = (function ProgressBarClosure() {
 
   return ProgressBar;
 })();
+
+exports.CSS_UNITS = CSS_UNITS;
+exports.DEFAULT_SCALE_VALUE = DEFAULT_SCALE_VALUE;
+exports.DEFAULT_SCALE = DEFAULT_SCALE;
+exports.UNKNOWN_SCALE = UNKNOWN_SCALE;
+exports.MAX_AUTO_SCALE = MAX_AUTO_SCALE;
+exports.SCROLLBAR_PADDING = SCROLLBAR_PADDING;
+exports.VERTICAL_PADDING = VERTICAL_PADDING;
+exports.mozL10n = mozL10n;
+exports.EventBus = EventBus;
+exports.ProgressBar = ProgressBar;
+exports.getPDFFileNameFromURL = getPDFFileNameFromURL;
+exports.noContextMenuHandler = noContextMenuHandler;
+exports.parseQueryString = parseQueryString;
+exports.getVisibleElements = getVisibleElements;
+exports.roundToDivide = roundToDivide;
+exports.approximateFraction = approximateFraction;
+exports.getOutputScale = getOutputScale;
+exports.scrollIntoView = scrollIntoView;
+exports.watchScroll = watchScroll;
+exports.binarySearchFirstItem = binarySearchFirstItem;
+}));

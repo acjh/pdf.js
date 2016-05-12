@@ -18,20 +18,20 @@
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     define('pdfjs/display/text_layer', ['exports', 'pdfjs/shared/util',
-      'pdfjs/display/dom_utils', 'pdfjs/shared/global'], factory);
+      'pdfjs/display/dom_utils'], factory);
   } else if (typeof exports !== 'undefined') {
-    factory(exports, require('../shared/util.js'), require('./dom_utils.js'),
-      require('../shared/global.js'));
+    factory(exports, require('../shared/util.js'), require('./dom_utils.js'));
   } else {
     factory((root.pdfjsDisplayTextLayer = {}), root.pdfjsSharedUtil,
-      root.pdfjsDisplayDOMUtils, root.pdfjsSharedGlobal);
+      root.pdfjsDisplayDOMUtils);
   }
-}(this, function (exports, sharedUtil, displayDOMUtils, sharedGlobal) {
+}(this, function (exports, sharedUtil, displayDOMUtils) {
 
 var Util = sharedUtil.Util;
 var createPromiseCapability = sharedUtil.createPromiseCapability;
 var CustomStyle = displayDOMUtils.CustomStyle;
-var PDFJS = sharedGlobal.PDFJS;
+var getDefaultSetting = displayDOMUtils.getDefaultSetting;
+var PageViewport = sharedUtil.PageViewport;
 
 /**
  * Text layer render parameters.
@@ -40,7 +40,7 @@ var PDFJS = sharedGlobal.PDFJS;
  * @property {TextContent} textContent - Text content to render (the object is
  *   returned by the page's getTextContent() method).
  * @property {HTMLElement} container - HTML element that will contain text runs.
- * @property {PDFJS.PageViewport} viewport - The target viewport to properly
+ * @property {PageViewport} viewport - The target viewport to properly
  *   layout the text runs.
  * @property {Array} textDivs - (optional) HTML elements that are correspond
  *   the text items of the textContent input. This is output and shall be
@@ -96,7 +96,7 @@ var renderTextLayer = (function renderTextLayerClosure() {
     // |fontName| is only used by the Font Inspector. This test will succeed
     // when e.g. the Font Inspector is off but the Stepper is on, but it's
     // not worth the effort to do a more accurate test.
-    if (PDFJS.pdfBug) {
+    if (getDefaultSetting('pdfBug')) {
       textDiv.dataset.fontName = geom.fontName;
     }
     // Storing into dataset will convert number into string.
@@ -156,23 +156,21 @@ var renderTextLayer = (function renderTextLayerClosure() {
       }
 
       var width = ctx.measureText(textDiv.textContent).width;
-      if (width > 0) {
-        textLayerFrag.appendChild(textDiv);
-        var transform;
-        if (textDiv.dataset.canvasWidth !== undefined) {
-          // Dataset values come of type string.
-          var textScale = textDiv.dataset.canvasWidth / width;
-          transform = 'scaleX(' + textScale + ')';
-        } else {
-          transform = '';
-        }
-        var rotation = textDiv.dataset.angle;
-        if (rotation) {
-          transform = 'rotate(' + rotation + 'deg) ' + transform;
-        }
-        if (transform) {
-          CustomStyle.setProp('transform' , textDiv, transform);
-        }
+      textLayerFrag.appendChild(textDiv);
+      var transform;
+      if (textDiv.dataset.canvasWidth !== undefined && width > 0) {
+        // Dataset values come of type string.
+        var textScale = textDiv.dataset.canvasWidth / width;
+        transform = 'scaleX(' + textScale + ')';
+      } else {
+        transform = '';
+      }
+      var rotation = textDiv.dataset.angle;
+      if (rotation) {
+        transform = 'rotate(' + rotation + 'deg) ' + transform;
+      }
+      if (transform) {
+        CustomStyle.setProp('transform' , textDiv, transform);
       }
     }
     capability.resolve();
@@ -183,7 +181,7 @@ var renderTextLayer = (function renderTextLayerClosure() {
    *
    * @param {TextContent} textContent
    * @param {HTMLElement} container
-   * @param {PDFJS.PageViewport} viewport
+   * @param {PageViewport} viewport
    * @param {Array} textDivs
    * @private
    */
@@ -250,8 +248,6 @@ var renderTextLayer = (function renderTextLayerClosure() {
 
   return renderTextLayer;
 })();
-
-PDFJS.renderTextLayer = renderTextLayer;
 
 exports.renderTextLayer = renderTextLayer;
 }));

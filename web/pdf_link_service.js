@@ -12,9 +12,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* globals PDFViewer, PDFHistory, Promise, parseQueryString */
 
 'use strict';
+
+(function (root, factory) {
+  if (typeof define === 'function' && define.amd) {
+    define('pdfjs-web/pdf_link_service', ['exports', 'pdfjs-web/ui_utils',
+      'pdfjs-web/dom_events'], factory);
+  } else if (typeof exports !== 'undefined') {
+    factory(exports, require('./ui_utils.js'), require('./dom_events.js'));
+  } else {
+    factory((root.pdfjsWebPDFLinkService = {}), root.pdfjsWebUIUtils,
+      root.pdfjsWebDOMEvents);
+  }
+}(this, function (exports, uiUtils, domEvents) {
+
+var parseQueryString = uiUtils.parseQueryString;
+
+/**
+ * @typedef {Object} PDFLinkServiceOptions
+ * @property {EventBus} eventBus - The application event bus.
+ */
 
 /**
  * Performs navigation functions inside PDF, such as opening specified page,
@@ -25,8 +43,11 @@
 var PDFLinkService = (function () {
   /**
    * @constructs PDFLinkService
+   * @param {PDFLinkServiceOptions} options
    */
-  function PDFLinkService() {
+  function PDFLinkService(options) {
+    options = options || {};
+    this.eventBus = options.eventBus || domEvents.getGlobalEventBus();
     this.baseUrl = null;
     this.pdfDocument = null;
     this.pdfViewer = null;
@@ -226,11 +247,10 @@ var PDFLinkService = (function () {
           this.page = pageNumber; // simple page
         }
         if ('pagemode' in params) {
-          var event = document.createEvent('CustomEvent');
-          event.initCustomEvent('pagemode', true, true, {
-            mode: params.pagemode,
+          this.eventBus.dispatch('pagemode', {
+            source: this,
+            mode: params.pagemode
           });
-          this.pdfViewer.container.dispatchEvent(event);
         }
       } else if (/^\d+$/.test(hash)) { // page number
         this.page = hash;
@@ -280,11 +300,10 @@ var PDFLinkService = (function () {
           break; // No action according to spec
       }
 
-      var event = document.createEvent('CustomEvent');
-      event.initCustomEvent('namedaction', true, true, {
+      this.eventBus.dispatch('namedaction', {
+        source: this,
         action: action
       });
-      this.pdfViewer.container.dispatchEvent(event);
     },
 
     /**
@@ -299,3 +318,56 @@ var PDFLinkService = (function () {
 
   return PDFLinkService;
 })();
+
+var SimpleLinkService = (function SimpleLinkServiceClosure() {
+  function SimpleLinkService() {}
+
+  SimpleLinkService.prototype = {
+    /**
+     * @returns {number}
+     */
+    get page() {
+      return 0;
+    },
+    /**
+     * @param {number} value
+     */
+    set page(value) {},
+    /**
+     * @param dest - The PDF destination object.
+     */
+    navigateTo: function (dest) {},
+    /**
+     * @param dest - The PDF destination object.
+     * @returns {string} The hyperlink to the PDF object.
+     */
+    getDestinationHash: function (dest) {
+      return '#';
+    },
+    /**
+     * @param hash - The PDF parameters/hash.
+     * @returns {string} The hyperlink to the PDF object.
+     */
+    getAnchorUrl: function (hash) {
+      return '#';
+    },
+    /**
+     * @param {string} hash
+     */
+    setHash: function (hash) {},
+    /**
+     * @param {string} action
+     */
+    executeNamedAction: function (action) {},
+    /**
+     * @param {number} pageNum - page number.
+     * @param {Object} pageRef - reference to the page.
+     */
+    cachePageRef: function (pageNum, pageRef) {}
+  };
+  return SimpleLinkService;
+})();
+
+exports.PDFLinkService = PDFLinkService;
+exports.SimpleLinkService = SimpleLinkService;
+}));

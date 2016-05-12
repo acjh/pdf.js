@@ -12,7 +12,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* globals PDFJS */
 
 'use strict';
 
@@ -31,10 +30,12 @@
 var AnnotationBorderStyleType = sharedUtil.AnnotationBorderStyleType;
 var AnnotationType = sharedUtil.AnnotationType;
 var Util = sharedUtil.Util;
-var addLinkAttributes = sharedUtil.addLinkAttributes;
-var getFilenameFromUrl = sharedUtil.getFilenameFromUrl;
+var addLinkAttributes = displayDOMUtils.addLinkAttributes;
+var LinkTarget = displayDOMUtils.LinkTarget;
+var getFilenameFromUrl = displayDOMUtils.getFilenameFromUrl;
 var warn = sharedUtil.warn;
 var CustomStyle = displayDOMUtils.CustomStyle;
+var getDefaultSetting = displayDOMUtils.getDefaultSetting;
 
 /**
  * @typedef {Object} AnnotationElementParameters
@@ -107,6 +108,7 @@ var AnnotationElement = (function AnnotationElementClosure() {
     this.viewport = parameters.viewport;
     this.linkService = parameters.linkService;
     this.downloadManager = parameters.downloadManager;
+    this.imageResourcesPath = parameters.imageResourcesPath;
 
     if (isRenderable) {
       this.container = this._createContainer();
@@ -277,13 +279,16 @@ var LinkAnnotationElement = (function LinkAnnotationElementClosure() {
       this.container.className = 'linkAnnotation';
 
       var link = document.createElement('a');
-      addLinkAttributes(link, { url: this.data.url });
+      addLinkAttributes(link, {
+        url: this.data.url,
+        target: (this.data.newWindow ? LinkTarget.BLANK : undefined),
+      });
 
       if (!this.data.url) {
         if (this.data.action) {
           this._bindNamedAction(link, this.data.action);
         } else {
-          this._bindLink(link, ('dest' in this.data) ? this.data.dest : null);
+          this._bindLink(link, (this.data.dest || null));
         }
       }
 
@@ -363,7 +368,7 @@ var TextAnnotationElement = (function TextAnnotationElementClosure() {
       var image = document.createElement('img');
       image.style.height = this.container.style.height;
       image.style.width = this.container.style.width;
-      image.src = PDFJS.imageResourcesPath + 'annotation-' +
+      image.src = this.imageResourcesPath + 'annotation-' +
         this.data.name.toLowerCase() + '.svg';
       image.alt = '[{{type}} Annotation]';
       image.dataset.l10nId = 'text_annotation_type';
@@ -838,6 +843,7 @@ var FileAttachmentAnnotationElement = (
  * @property {Array} annotations
  * @property {PDFPage} page
  * @property {IPDFLinkService} linkService
+ * @property {string} imageResourcesPath
  */
 
 /**
@@ -868,7 +874,9 @@ var AnnotationLayer = (function AnnotationLayerClosure() {
           page: parameters.page,
           viewport: parameters.viewport,
           linkService: parameters.linkService,
-          downloadManager: parameters.downloadManager
+          downloadManager: parameters.downloadManager,
+          imageResourcesPath: parameters.imageResourcesPath ||
+                              getDefaultSetting('imageResourcesPath')
         };
         var element = annotationElementFactory.create(properties);
         if (element.isRenderable) {
@@ -898,8 +906,6 @@ var AnnotationLayer = (function AnnotationLayerClosure() {
     }
   };
 })();
-
-PDFJS.AnnotationLayer = AnnotationLayer;
 
 exports.AnnotationLayer = AnnotationLayer;
 }));

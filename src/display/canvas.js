@@ -12,22 +12,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* globals PDFJS, ImageData */
+/* globals ImageData */
 
 'use strict';
 
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     define('pdfjs/display/canvas', ['exports', 'pdfjs/shared/util',
-      'pdfjs/display/pattern_helper', 'pdfjs/display/webgl'], factory);
+      'pdfjs/display/dom_utils', 'pdfjs/display/pattern_helper',
+      'pdfjs/display/webgl'], factory);
   } else if (typeof exports !== 'undefined') {
-    factory(exports, require('../shared/util.js'),
+    factory(exports, require('../shared/util.js'), require('./dom_utils.js'),
       require('./pattern_helper.js'), require('./webgl.js'));
   } else {
     factory((root.pdfjsDisplayCanvas = {}), root.pdfjsSharedUtil,
-      root.pdfjsDisplayPatternHelper, root.pdfjsDisplayWebGL);
+      root.pdfjsDisplayDOMUtils, root.pdfjsDisplayPatternHelper,
+      root.pdfjsDisplayWebGL);
   }
-}(this, function (exports, sharedUtil, displayPatternHelper, displayWebGL) {
+}(this, function (exports, sharedUtil, displayDOMUtils, displayPatternHelper,
+                  displayWebGL) {
 
 var FONT_IDENTITY_MATRIX = sharedUtil.FONT_IDENTITY_MATRIX;
 var IDENTITY_MATRIX = sharedUtil.IDENTITY_MATRIX;
@@ -40,12 +43,14 @@ var assert = sharedUtil.assert;
 var info = sharedUtil.info;
 var isNum = sharedUtil.isNum;
 var isArray = sharedUtil.isArray;
+var isLittleEndian = sharedUtil.isLittleEndian;
 var error = sharedUtil.error;
 var shadow = sharedUtil.shadow;
 var warn = sharedUtil.warn;
 var TilingPattern = displayPatternHelper.TilingPattern;
 var getShadingPatternFromIR = displayPatternHelper.getShadingPatternFromIR;
 var WebGLUtils = displayWebGL.WebGLUtils;
+var hasCanvasTypedArrays = displayDOMUtils.hasCanvasTypedArrays;
 
 // <canvas> contexts store most of the state we need natively.
 // However, PDF needs a bit more state, which we store here.
@@ -63,6 +68,18 @@ var COMPILE_TYPE3_GLYPHS = true;
 var MAX_SIZE_TO_COMPILE = 1000;
 
 var FULL_CHUNK_HEIGHT = 16;
+
+var HasCanvasTypedArraysCached = {
+  get value() {
+    return shadow(HasCanvasTypedArraysCached, 'value', hasCanvasTypedArrays());
+  }
+};
+
+var IsLittleEndianCached = {
+  get value() {
+    return shadow(IsLittleEndianCached, 'value', isLittleEndian());
+  }
+};
 
 function createScratchCanvas(width, height) {
   var canvas = document.createElement('canvas');
@@ -415,7 +432,8 @@ var CanvasExtraState = (function CanvasExtraStateClosure() {
     this.fillAlpha = 1;
     this.strokeAlpha = 1;
     this.lineWidth = 1;
-    this.activeSMask = null; // nonclonable field (see the save method below)
+    this.activeSMask = null;
+    this.resumeSMaskCtx = null; // nonclonable field (see the save method below)
 
     this.old = old;
   }
@@ -502,13 +520,13 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
     if (imgData.kind === ImageKind.GRAYSCALE_1BPP) {
       // Grayscale, 1 bit per pixel (i.e. black-and-white).
       var srcLength = src.byteLength;
-      var dest32 = PDFJS.hasCanvasTypedArrays ? new Uint32Array(dest.buffer) :
-        new Uint32ArrayView(dest);
+      var dest32 = HasCanvasTypedArraysCached.value ?
+        new Uint32Array(dest.buffer) : new Uint32ArrayView(dest);
       var dest32DataLength = dest32.length;
       var fullSrcDiff = (width + 7) >> 3;
       var white = 0xFFFFFFFF;
-      var black = (PDFJS.isLittleEndian || !PDFJS.hasCanvasTypedArrays) ?
-        0xFF000000 : 0x000000FF;
+      var black = (IsLittleEndianCached.value ||
+                   !HasCanvasTypedArraysCached.value) ? 0xFF000000 : 0x000000FF;
       for (i = 0; i < totalChunks; i++) {
         thisChunkHeight =
           (i < fullChunks) ? FULL_CHUNK_HEIGHT : partialChunkHeight;
@@ -852,11 +870,19 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
     },
 
     endDrawing: function CanvasGraphics_endDrawing() {
+      // Finishing all opened operations such as SMask group painting.
+      if (this.current.activeSMask !== null) {
+        this.endSMaskGroup();
+      }
+
       this.ctx.restore();
 
       if (this.transparentCanvas) {
         this.ctx = this.compositeCtx;
+        this.ctx.save();
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0); // Avoid apply transform twice
         this.ctx.drawImage(this.transparentCanvas, 0, 0);
+        this.ctx.restore();
         this.transparentCanvas = null;
       }
 
@@ -957,7 +983,16 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
             break;
           case 'SMask':
             if (this.current.activeSMask) {
-              this.endSMaskGroup();
+              // If SMask is currrenly used, it needs to be suspended or
+              // finished. Suspend only makes sense when at least one save()
+              // was performed and state needs to be reverted on restore().
+              if (this.stateStack.length > 0 &&
+                  (this.stateStack[this.stateStack.length - 1].activeSMask ===
+                   this.current.activeSMask)) {
+                this.suspendSMaskGroup();
+              } else {
+                this.endSMaskGroup();
+              }
             }
             this.current.activeSMask = value ? this.tempSMask : null;
             if (this.current.activeSMask) {
@@ -986,6 +1021,8 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       groupCtx.translate(-activeSMask.offsetX, -activeSMask.offsetY);
       groupCtx.transform.apply(groupCtx, currentTransform);
 
+      activeSMask.startTransformInverse = groupCtx.mozCurrentTransformInverse;
+
       copyCtxState(currentCtx, groupCtx);
       this.ctx = groupCtx;
       this.setGState([
@@ -993,6 +1030,43 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
         ['ca', 1],
         ['CA', 1]
       ]);
+      this.groupStack.push(currentCtx);
+      this.groupLevel++;
+    },
+    suspendSMaskGroup: function CanvasGraphics_endSMaskGroup() {
+      // Similar to endSMaskGroup, the intermediate canvas has to be composed
+      // and future ctx state restored.
+      var groupCtx = this.ctx;
+      this.groupLevel--;
+      this.ctx = this.groupStack.pop();
+
+      composeSMask(this.ctx, this.current.activeSMask, groupCtx);
+      this.ctx.restore();
+      this.ctx.save(); // save is needed since SMask will be resumed.
+      copyCtxState(groupCtx, this.ctx);
+
+      // Saving state for resuming.
+      this.current.resumeSMaskCtx = groupCtx;
+      // Transform was changed in the SMask canvas, reflecting this change on
+      // this.ctx.
+      var deltaTransform = Util.transform(
+        this.current.activeSMask.startTransformInverse,
+        groupCtx.mozCurrentTransform);
+      this.ctx.transform.apply(this.ctx, deltaTransform);
+
+      // SMask was composed, the results at the groupCtx can be cleared.
+      groupCtx.save();
+      groupCtx.setTransform(1, 0, 0, 1, 0, 0);
+      groupCtx.clearRect(0, 0, groupCtx.canvas.width, groupCtx.canvas.height);
+      groupCtx.restore();
+    },
+    resumeSMaskGroup: function CanvasGraphics_endSMaskGroup() {
+      // Resuming state saved by suspendSMaskGroup. We don't need to restore
+      // any groupCtx state since restore() command (the only caller) will do
+      // that for us. See also beginSMaskGroup.
+      var groupCtx = this.current.resumeSMaskCtx;
+      var currentCtx = this.ctx;
+      this.ctx = groupCtx;
       this.groupStack.push(currentCtx);
       this.groupLevel++;
     },
@@ -1004,20 +1078,34 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       composeSMask(this.ctx, this.current.activeSMask, groupCtx);
       this.ctx.restore();
       copyCtxState(groupCtx, this.ctx);
+      // Transform was changed in the SMask canvas, reflecting this change on
+      // this.ctx.
+      var deltaTransform = Util.transform(
+        this.current.activeSMask.startTransformInverse,
+        groupCtx.mozCurrentTransform);
+      this.ctx.transform.apply(this.ctx, deltaTransform);
     },
     save: function CanvasGraphics_save() {
       this.ctx.save();
       var old = this.current;
       this.stateStack.push(old);
       this.current = old.clone();
-      this.current.activeSMask = null;
+      this.current.resumeSMaskCtx = null;
     },
     restore: function CanvasGraphics_restore() {
-      if (this.stateStack.length !== 0) {
-        if (this.current.activeSMask !== null) {
-          this.endSMaskGroup();
-        }
+      // SMask was suspended, we just need to resume it.
+      if (this.current.resumeSMaskCtx) {
+        this.resumeSMaskGroup();
+      }
+      // SMask has to be finished once there is no states that are using the
+      // same SMask.
+      if (this.current.activeSMask !== null && (this.stateStack.length === 0 ||
+          this.stateStack[this.stateStack.length - 1].activeSMask !==
+          this.current.activeSMask)) {
+        this.endSMaskGroup();
+      }
 
+      if (this.stateStack.length !== 0) {
         this.current = this.stateStack.pop();
         this.ctx.restore();
 
@@ -1805,7 +1893,8 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
           scaleY: scaleY,
           subtype: group.smask.subtype,
           backdrop: group.smask.backdrop,
-          transferMap: group.smask.transferMap || null
+          transferMap: group.smask.transferMap || null,
+          startTransformInverse: null, // used during suspend operation
         });
       } else {
         // Setup the current ctx so when the group is popped we draw it at the
@@ -1825,6 +1914,9 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       ]);
       this.groupStack.push(currentCtx);
       this.groupLevel++;
+
+      // Reseting mask state, masks will be applied on restore of the group.
+      this.current.activeSMask = null;
     },
 
     endGroup: function CanvasGraphics_endGroup(group) {

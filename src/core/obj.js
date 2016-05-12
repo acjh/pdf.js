@@ -172,7 +172,7 @@ var Catalog = (function CatalogClosure() {
         var title = outlineDict.get('Title');
         var flags = outlineDict.get('F') || 0;
 
-        var color = outlineDict.get('C'), rgbColor = blackColor;
+        var color = outlineDict.getArray('C'), rgbColor = blackColor;
         // We only need to parse the color when it's valid, and non-default.
         if (isArray(color) && color.length === 3 &&
             (color[0] !== 0 || color[1] !== 0 || color[2] !== 0)) {
@@ -736,6 +736,12 @@ var XRef = (function XRefClosure() {
             error('Invalid entry in XRef subsection: ' + first + ', ' + count);
           }
 
+          // The first xref table entry, i.e. obj 0, should be free. Attempting
+          // to adjust an incorrect first obj # (fixes issue 3248 and 7229).
+          if (i === 0 && entry.free && first === 1) {
+            first = 0;
+          }
+
           if (!this.entries[i + first]) {
             this.entries[i + first] = entry;
           }
@@ -747,12 +753,6 @@ var XRef = (function XRefClosure() {
         tableState.parserBuf2 = parser.buf2;
         delete tableState.firstEntryNum;
         delete tableState.entryCount;
-      }
-
-      // Per issue 3248: hp scanners generate bad XRef
-      if (first === 1 && this.entries[1] && this.entries[1].free) {
-        // shifting the entries
-        this.entries.shift();
       }
 
       // Sanity check: as per spec, first object must be free
@@ -1175,6 +1175,11 @@ var XRef = (function XRefClosure() {
       // read stream objects for cache
       for (i = 0; i < n; ++i) {
         entries.push(parser.getObj());
+        // The ObjStm should not contain 'endobj'. If it's present, skip over it
+        // to support corrupt PDFs (fixes issue 5241, bug 898610, bug 1037816).
+        if (isCmd(parser.buf1, 'endobj')) {
+          parser.shift();
+        }
         num = nums[i];
         var entry = this.entries[num];
         if (entry && entry.offset === tableOffset && entry.gen === i) {
