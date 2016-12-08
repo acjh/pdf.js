@@ -53,6 +53,22 @@ text elements rendered by closure, and not by the base library.
         $ };
         $ PDFJS.FormFunctionality.setControlRenderClosureByType(myClosure,'TEXT');
 
+Alternately, you may accept the base default rendering of the control element, but instead opt to modify the control
+element after the default control element object has been created, but before it has been inserted into the dom.
+This is called for the pageholder div with params "PAGE","page" and the element, the canvas element
+with params "CANVAS","canvas" and the element, the form element with params "FORM","form" and the element, and
+for each individual input control, with fieldType as one of the FormFunctionality.fieldTypes constants
+(CHECK_BOX, DROP_DOWN, TEXT etc), elementId with fieldData.correctedId which maps to the name of the element
+as well as the id for non-radio buttons and element which is the actual input object.
+
+        $ var myClosure = function (fieldType, elementId, element) {
+        $     if (fieldType!='PAGE' && fieldType!='CANVAS' && fieldType!='FORM') {
+        $         element.style = element.style + '; background-color:orange;';
+        $     }
+        $ };
+        $ PDFJS.FormFunctionality.setPostCreationTweak(myClosure);
+
+
 The basic types are:
 + CHECK_BOX - Check boxes
 + TEXT - All _input_ controls of type text, file and password as well as _textarea_s
