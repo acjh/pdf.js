@@ -30,7 +30,11 @@
       root.pdfjsWebPDFJS);
   }
 }(this, function (exports, app, overlayManager, preferences, pdfjsLib) {
-//#if CHROME
+  if (typeof PDFJSDev === 'undefined' || !PDFJSDev.test('CHROME')) {
+    throw new Error('Module "pdfjs-web/chromecom" shall not be used outside ' +
+                    'CHROME build.');
+  }
+
   var PDFViewerApplication = app.PDFViewerApplication;
   var DefaultExernalServices = app.DefaultExernalServices;
   var OverlayManager = overlayManager.OverlayManager;
@@ -198,7 +202,7 @@
       // because the shown string should match the UI at chrome://extensions.
       // These strings are from chrome/app/resources/generated_resources_*.xtb.
       var i18nFileAccessLabel =
-//#include $ROOT/web/chrome-i18n-allow-access-to-file-urls.json
+        PDFJSDev.json('$ROOT/web/chrome-i18n-allow-access-to-file-urls.json')
         [chrome.i18n.getUILanguage && chrome.i18n.getUILanguage()];
 
       if (i18nFileAccessLabel) {
@@ -278,7 +282,7 @@
         // the PDF file. When the viewer is reloaded or when the user navigates
         // back and forward, the background page will not observe a HTTP request
         // with Referer. To make sure that the Referer is preserved, store it in
-        // history.state, which is preserved accross reloads/navigations.
+        // history.state, which is preserved across reloads/navigations.
         var state = window.history.state || {};
         state.chromecomState = referer;
         window.history.replaceState(state, '');
@@ -297,17 +301,22 @@
     }
   }
 
+  // chrome.storage.sync is not supported in every Chromium-derivate.
+  // Note: The background page takes care of migrating values from
+  // chrome.storage.local to chrome.storage.sync when needed.
+  var storageArea = chrome.storage.sync || chrome.storage.local;
+
   Preferences._writeToStorage = function (prefObj) {
     return new Promise(function (resolve) {
       if (prefObj === Preferences.defaults) {
         var keysToRemove = Object.keys(Preferences.defaults);
         // If the storage is reset, remove the keys so that the values from
         // managed storage are applied again.
-        chrome.storage.local.remove(keysToRemove, function() {
+        storageArea.remove(keysToRemove, function() {
           resolve();
         });
       } else {
-        chrome.storage.local.set(prefObj, function() {
+        storageArea.set(prefObj, function() {
           resolve();
         });
       }
@@ -331,7 +340,7 @@
           // Managed storage not supported, e.g. in Opera.
           defaultPrefs = Preferences.defaults;
         }
-        chrome.storage.local.get(defaultPrefs, function(readPrefs) {
+        storageArea.get(defaultPrefs, function(readPrefs) {
           resolve(readPrefs);
         });
       }
@@ -347,5 +356,4 @@
   PDFViewerApplication.externalServices = ChromeExternalServices;
 
   exports.ChromeCom = ChromeCom;
-//#endif
 }));

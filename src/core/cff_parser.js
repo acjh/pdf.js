@@ -349,9 +349,9 @@ var CFFParser = (function CFFParserClosure() {
         } else if (value >= 251 && value <= 254) {
           return -((value - 251) * 256) - dict[pos++] - 108;
         } else {
-          error('255 is not a valid DICT command');
+          warn('CFFParser_parseDict: "' + value + '" is a reserved command.');
+          return NaN;
         }
-        return -1;
       }
 
       function parseFloatOperand() {
@@ -833,7 +833,7 @@ var CFFParser = (function CFFParserClosure() {
             break;
 
           default:
-            error('Unknow encoding format: ' + format + ' in CFF');
+            error('Unknown encoding format: ' + format + ' in CFF');
             break;
         }
         var dataEnd = pos;
@@ -856,8 +856,8 @@ var CFFParser = (function CFFParserClosure() {
       var start = pos;
       var bytes = this.bytes;
       var format = bytes[pos++];
-      var fdSelect = [];
-      var i;
+      var fdSelect = [], rawBytes;
+      var i, invalidFirstGID = false;
 
       switch (format) {
         case 0:
@@ -865,11 +865,18 @@ var CFFParser = (function CFFParserClosure() {
             var id = bytes[pos++];
             fdSelect.push(id);
           }
+          rawBytes = bytes.subarray(start, pos);
           break;
         case 3:
           var rangesCount = (bytes[pos++] << 8) | bytes[pos++];
           for (i = 0; i < rangesCount; ++i) {
             var first = (bytes[pos++] << 8) | bytes[pos++];
+            if (i === 0 && first !== 0) {
+              warn('parseFDSelect: The first range must have a first GID of 0' +
+                   ' -- trying to recover.');
+              invalidFirstGID = true;
+              first = 0;
+            }
             var fdIndex = bytes[pos++];
             var next = (bytes[pos] << 8) | bytes[pos + 1];
             for (var j = first; j < next; ++j) {
@@ -878,13 +885,19 @@ var CFFParser = (function CFFParserClosure() {
           }
           // Advance past the sentinel(next).
           pos += 2;
+          rawBytes = bytes.subarray(start, pos);
+
+          if (invalidFirstGID) {
+            rawBytes[3] = rawBytes[4] = 0; // Adjust the first range, first GID.
+          }
           break;
         default:
-          error('Unknown fdselect format ' + format);
+          error('parseFDSelect: Unknown format "' + format + '".');
           break;
       }
-      var end = pos;
-      return new CFFFDSelect(fdSelect, bytes.subarray(start, end));
+      assert(fdSelect.length === length, 'parseFDSelect: Invalid font data.');
+
+      return new CFFFDSelect(fdSelect, rawBytes);
     }
   };
   return CFFParser;
@@ -987,9 +1000,17 @@ var CFFDict = (function CFFDictClosure() {
       if (!(key in this.keyToNameMap)) {
         return false;
       }
+      var valueLength = value.length;
       // ignore empty values
-      if (value.length === 0) {
+      if (valueLength === 0) {
         return true;
+      }
+      // Ignore invalid values (fixes bug1068432.pdf and bug1308536.pdf).
+      for (var i = 0; i < valueLength; i++) {
+        if (isNaN(value[i])) {
+          warn('Invalid CFFDict value: "' + value + '" for key "' + key + '".');
+          return true;
+        }
       }
       var type = this.types[key];
       // remove the array wrapping these types of values
@@ -1288,7 +1309,7 @@ var CFFCompiler = (function CFFCompilerClosure() {
       var globalSubrIndex = this.compileIndex(cff.globalSubrIndex);
       output.add(globalSubrIndex);
 
-      // Now start on the other entries that have no specfic order.
+      // Now start on the other entries that have no specific order.
       if (cff.encoding && cff.topDict.hasName('Encoding')) {
         if (cff.encoding.predefined) {
           topDictTracker.setEntryLocation('Encoding', [cff.encoding.format],

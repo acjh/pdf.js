@@ -1,5 +1,6 @@
-/* globals describe, it, expect, beforeAll, afterAll, Stream, CFFParser,
-           SEAC_ANALYSIS_ENABLED, CFFIndex, CFFStrings, CFFCompiler */
+/* globals describe, it, expect, beforeAll, afterAll, beforeEach, afterEach,
+           Stream, CFFParser, SEAC_ANALYSIS_ENABLED, CFFIndex, CFFStrings,
+           CFFCompiler */
 
 'use strict';
 
@@ -33,14 +34,22 @@ describe('CFFParser', function() {
       fontArr.push(parseInt(hex, 16));
     }
     fontData = new Stream(fontArr);
+    done();
+  });
 
+  afterAll(function () {
+    fontData = null;
+  });
+
+  beforeEach(function (done) {
     parser = new CFFParser(fontData, {}, SEAC_ANALYSIS_ENABLED);
     cff = parser.parse();
     done();
   });
 
-  afterAll(function () {
-    fontData = parser = cff = null;
+  afterEach(function (done) {
+    parser = cff = null;
+    done();
   });
 
   it('parses header', function() {
@@ -93,6 +102,33 @@ describe('CFFParser', function() {
     expect(topDict.getByName('FontBBox')).toEqual([-168, -218, 1000, 898]);
     expect(topDict.getByName('CharStrings')).toEqual(94);
     expect(topDict.getByName('Private')).toEqual([45, 102]);
+  });
+
+  it('refuses to add topDict key with invalid value (bug 1068432)',
+      function () {
+    var topDict = cff.topDict;
+    var defaultValue = topDict.getByName('UnderlinePosition');
+
+    topDict.setByKey(/* [12, 3] = */ 3075, [NaN]);
+    expect(topDict.getByName('UnderlinePosition')).toEqual(defaultValue);
+  });
+
+  it('ignores reserved commands in parseDict, and refuses to add privateDict ' +
+     'keys with invalid values (bug 1308536)', function () {
+    var bytes = new Uint8Array([
+      64, 39, 31, 30, 252, 114, 137, 115, 79, 30, 197, 119, 2, 99, 127, 6
+    ]);
+    parser.bytes = bytes;
+    var topDict = cff.topDict;
+    topDict.setByName('Private', [bytes.length, 0]);
+
+    var parsePrivateDict = function () {
+      parser.parsePrivateDict(topDict);
+    };
+    expect(parsePrivateDict).not.toThrow();
+
+    var privateDict = topDict.privateDict;
+    expect(privateDict.getByName('BlueValues')).toBeNull();
   });
 
   it('parses a CharString having cntrmask', function() {
@@ -253,10 +289,12 @@ describe('CFFParser', function() {
     var bytes = new Uint8Array([0x00, // format
                                 0x00, // gid: 0 fd: 0
                                 0x01 // gid: 1 fd: 1
-                              ]);
-    parser.bytes = bytes;
+                               ]);
+    parser.bytes = bytes.slice();
     var fdSelect = parser.parseFDSelect(0, 2);
+
     expect(fdSelect.fdSelect).toEqual([0, 1]);
+    expect(fdSelect.raw).toEqual(bytes);
   });
 
   it('parses fdselect format 3', function() {
@@ -264,13 +302,32 @@ describe('CFFParser', function() {
                                 0x00, 0x02, // range count
                                 0x00, 0x00, // first gid
                                 0x09, // font dict 1 id
-                                0x00, 0x02, // nex gid
-                                0x0a, // font dict 2 gid
+                                0x00, 0x02, // next gid
+                                0x0a, // font dict 2 id
                                 0x00, 0x04 // sentinel (last gid)
-                              ]);
-    parser.bytes = bytes;
-    var fdSelect = parser.parseFDSelect(0, 2);
+                               ]);
+    parser.bytes = bytes.slice();
+    var fdSelect = parser.parseFDSelect(0, 4);
+
     expect(fdSelect.fdSelect).toEqual([9, 9, 0xa, 0xa]);
+    expect(fdSelect.raw).toEqual(bytes);
+  });
+
+  it('parses invalid fdselect format 3 (bug 1146106)', function() {
+    var bytes = new Uint8Array([0x03, // format
+                                0x00, 0x02, // range count
+                                0x00, 0x01, // first gid (invalid)
+                                0x09, // font dict 1 id
+                                0x00, 0x02, // next gid
+                                0x0a, // font dict 2 id
+                                0x00, 0x04 // sentinel (last gid)
+                               ]);
+    parser.bytes = bytes.slice();
+    var fdSelect = parser.parseFDSelect(0, 4);
+
+    expect(fdSelect.fdSelect).toEqual([9, 9, 0xa, 0xa]);
+    bytes[3] = bytes[4] = 0x00; // The adjusted first range, first gid.
+    expect(fdSelect.raw).toEqual(bytes);
   });
 
   // TODO fdArray

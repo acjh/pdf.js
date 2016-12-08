@@ -53,7 +53,6 @@
       var event = document.createEvent('UIEvents');
       event.initUIEvent('pagechange', true, true, window, 0);
       event.pageNumber = e.pageNumber;
-      event.previousPageNumber = e.previousPageNumber;
       e.source.container.dispatchEvent(event);
     });
     eventBus.on('pagesinit', function (e) {
@@ -88,6 +87,7 @@
       var event = document.createEvent('CustomEvent');
       event.initCustomEvent('find' + e.type, true, true, {
         query: e.query,
+        phraseSearch: e.phraseSearch,
         caseSensitive: e.caseSensitive,
         highlightAll: e.highlightAll,
         findPrevious: e.findPrevious

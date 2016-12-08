@@ -82,7 +82,8 @@ var WorkerTask = (function WorkerTaskClosure() {
   return WorkerTask;
 })();
 
-//#if !PRODUCTION
+if (typeof PDFJSDev === 'undefined' || !PDFJSDev.test('PRODUCTION')) {
+/*jshint -W082 */
 /**
  * Interface that represents PDF data transport. If possible, it allows
  * progressively load entire or fragment of the PDF binary data.
@@ -210,7 +211,7 @@ IPDFStreamRangeReader.prototype = {
    */
   onProgress: null,
 };
-//#endif
+}
 
 /** @implements {IPDFStream} */
 var PDFWorkerStream = (function PDFWorkerStreamClosure() {
@@ -479,6 +480,7 @@ var WorkerMessageHandler = {
     var WorkerTasks = [];
 
     var docId = docParams.docId;
+    var docBaseUrl = docParams.docBaseUrl;
     var workerHandlerName = docParams.docId + '_worker';
     var handler = new MessageHandler(workerHandlerName, docId, port);
 
@@ -543,7 +545,7 @@ var WorkerMessageHandler = {
       if (source.data) {
         try {
           pdfManager = new LocalPdfManager(docId, source.data, source.password,
-                                           evaluatorOptions);
+                                           evaluatorOptions, docBaseUrl);
           pdfManagerCapability.resolve(pdfManager);
         } catch (ex) {
           pdfManagerCapability.reject(ex);
@@ -592,7 +594,7 @@ var WorkerMessageHandler = {
           length: fullRequest.contentLength,
           disableAutoFetch: disableAutoFetch,
           rangeChunkSize: source.rangeChunkSize
-        }, evaluatorOptions);
+        }, evaluatorOptions, docBaseUrl);
         pdfManagerCapability.resolve(pdfManager);
         cancelXHRs = null;
       }).catch(function (reason) {
@@ -609,7 +611,7 @@ var WorkerMessageHandler = {
         // the data is array, instantiating directly from it
         try {
           pdfManager = new LocalPdfManager(docId, pdfFile, source.password,
-                                           evaluatorOptions);
+                                           evaluatorOptions, docBaseUrl);
           pdfManagerCapability.resolve(pdfManager);
         } catch (ex) {
           pdfManagerCapability.reject(ex);
@@ -745,14 +747,17 @@ var WorkerMessageHandler = {
       return pdfManager.getPage(data.pageIndex).then(function(page) {
         var rotatePromise = pdfManager.ensure(page, 'rotate');
         var refPromise = pdfManager.ensure(page, 'ref');
+        var userUnitPromise = pdfManager.ensure(page, 'userUnit');
         var viewPromise = pdfManager.ensure(page, 'view');
 
-        return Promise.all([rotatePromise, refPromise, viewPromise]).then(
-            function(results) {
+        return Promise.all([
+          rotatePromise, refPromise, userUnitPromise, viewPromise
+        ]).then(function(results) {
           return {
             rotate: results[0],
             ref: results[1],
-            view: results[2]
+            userUnit: results[2],
+            view: results[3]
           };
         });
       });
@@ -839,7 +844,8 @@ var WorkerMessageHandler = {
         var pageNum = pageIndex + 1;
         var start = Date.now();
         // Pre compile the pdf page and fetch the fonts/images.
-        page.getOperatorList(handler, task, data.intent).then(
+        page.getOperatorList(handler, task, data.intent,
+                             data.renderInteractiveForms).then(
             function(operatorList) {
           finishWorkerTask(task);
 
@@ -891,12 +897,14 @@ var WorkerMessageHandler = {
     handler.on('GetTextContent', function wphExtractText(data) {
       var pageIndex = data.pageIndex;
       var normalizeWhitespace = data.normalizeWhitespace;
+      var combineTextItems = data.combineTextItems;
       return pdfManager.getPage(pageIndex).then(function(page) {
         var task = new WorkerTask('GetTextContent: page ' + pageIndex);
         startWorkerTask(task);
         var pageNum = pageIndex + 1;
         var start = Date.now();
-        return page.extractTextContent(task, normalizeWhitespace).then(
+        return page.extractTextContent(task, normalizeWhitespace,
+                                       combineTextItems).then(
             function(textContent) {
           finishWorkerTask(task);
           info('text indexing: page=' + pageNum + ' - time=' +
@@ -949,8 +957,8 @@ var WorkerMessageHandler = {
 };
 
 function initializeWorker() {
-//#if !MOZCENTRAL
-  if (!('console' in globalScope)) {
+  if ((typeof PDFJSDev === 'undefined' || !PDFJSDev.test('MOZCENTRAL')) &&
+      !('console' in globalScope)) {
     var consoleTimer = {};
 
     var workerConsole = {
@@ -988,7 +996,6 @@ function initializeWorker() {
 
     globalScope.console = workerConsole;
   }
-//#endif
 
   var handler = new MessageHandler('worker', 'main', self);
   WorkerMessageHandler.setup(handler, self);

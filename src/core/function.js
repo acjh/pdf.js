@@ -226,7 +226,7 @@ var PDFFunction = (function PDFFunctionClosure() {
           // x_i' = min(max(x_i, Domain_2i), Domain_2i+1)
           var domain_2i = domain[i][0];
           var domain_2i_1 = domain[i][1];
-          var xi = Math.min(Math.max(src[srcOffset +i], domain_2i),
+          var xi = Math.min(Math.max(src[srcOffset + i], domain_2i),
                             domain_2i_1);
 
           // e_i = Interpolate(x_i', Domain_2i, Domain_2i+1,
@@ -362,7 +362,7 @@ var PDFFunction = (function PDFFunctionClosure() {
 
         // clip to domain
         var v = clip(src[srcOffset], domain[0], domain[1]);
-        // calulate which bound the value is in
+        // calculate which bound the value is in
         for (var i = 0, ii = bounds.length; i < ii; ++i) {
           if (v < bounds[i]) {
             break;
@@ -467,7 +467,7 @@ var PDFFunction = (function PDFFunctionClosure() {
           if (value < bound) {
             value = bound;
           } else {
-            bound = range[i * 2 +1];
+            bound = range[i * 2 + 1];
             if (value > bound) {
               value = bound;
             }
@@ -1052,7 +1052,7 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
               return null;
             }
             n = num1.number;
-            if (n < 0 || (n|0) !== n || stack.length < n) {
+            if (n < 0 || (n | 0) !== n || stack.length < n) {
               return null;
             }
             ast1 = stack[stack.length - n - 1];
@@ -1102,7 +1102,7 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
             }
             j = num2.number;
             n = num1.number;
-            if (n <= 0 || (n|0) !== n || (j|0) !== j || stack.length < n) {
+            if (n <= 0 || (n | 0) !== n || (j | 0) !== j || stack.length < n) {
               // ... and integers
               return null;
             }

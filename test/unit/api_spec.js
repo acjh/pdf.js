@@ -1,7 +1,7 @@
 /* globals PDFJS, expect, it, describe, Promise, beforeAll,
            InvalidPDFException, MissingPDFException, StreamType, FontType,
            PDFDocumentProxy, PasswordException, PasswordResponses, afterAll,
-           PDFPageProxy, createPromiseCapability, beforeEach, afterEach */
+           PDFPageProxy, createPromiseCapability, afterEach */
 
 'use strict';
 
@@ -341,13 +341,32 @@ describe('api', function() {
       });
     });
     it('gets non-existent page', function(done) {
-      var promise = doc.getPage(100);
-      promise.then(function () {
-        done.fail('shall fail for non-existent page');
-      }, function(data) {
-        expect(data instanceof Error).toEqual(true);
-        done();
+      var outOfRangePromise = doc.getPage(100);
+      var nonIntegerPromise = doc.getPage(2.5);
+      var nonNumberPromise = doc.getPage('1');
+
+      outOfRangePromise = outOfRangePromise.then(function () {
+        throw new Error('shall fail for out-of-range pageNumber parameter');
+      }, function (reason) {
+        expect(reason instanceof Error).toEqual(true);
       });
+      nonIntegerPromise = nonIntegerPromise.then(function () {
+        throw new Error('shall fail for non-integer pageNumber parameter');
+      }, function (reason) {
+        expect(reason instanceof Error).toEqual(true);
+      });
+      nonNumberPromise = nonNumberPromise.then(function () {
+        throw new Error('shall fail for non-number pageNumber parameter');
+      }, function (reason) {
+        expect(reason instanceof Error).toEqual(true);
+      });
+
+      Promise.all([outOfRangePromise, nonIntegerPromise, nonNumberPromise]).
+        then(function () {
+          done();
+        }).catch(function (reason) {
+          done.fail(reason);
+        });
     });
     it('gets page index', function(done) {
       // reference to second page
@@ -358,6 +377,16 @@ describe('api', function() {
         done();
       }).catch(function (reason) {
         done.fail(reason);
+      });
+    });
+    it('gets invalid page index', function (done) {
+      var ref = { num: 3, gen: 0 }; // Reference to a font dictionary.
+      var promise = doc.getPageIndex(ref);
+      promise.then(function () {
+        done.fail('shall fail for invalid page reference.');
+      }).catch(function (reason) {
+        expect(reason instanceof Error).toEqual(true);
+        done();
       });
     });
 
@@ -474,20 +503,31 @@ describe('api', function() {
         return pdfDoc.getPageLabels();
       });
 
-      Promise.all([promise0, promise1, promise2]).then(function (pageLabels) {
+      // PageLabels with bad "Prefix" entries.
+      var url3 = new URL('../pdfs/bad-PageLabels.pdf', window.location).href;
+      var loadingTask3 = new PDFJS.getDocument(url3);
+      var promise3 = loadingTask3.promise.then(function (pdfDoc) {
+        return pdfDoc.getPageLabels();
+      });
+
+      Promise.all([promise0, promise1, promise2, promise3]).then(
+          function (pageLabels) {
         expect(pageLabels[0]).toEqual(['i', 'ii', 'iii', '1']);
         expect(pageLabels[1]).toEqual(['Front Page1']);
         expect(pageLabels[2]).toEqual(['1', '2']);
+        expect(pageLabels[3]).toEqual(['X3']);
 
         loadingTask0.destroy();
         loadingTask1.destroy();
         loadingTask2.destroy();
+        loadingTask3.destroy();
         done();
       }).catch(function (reason) {
         done.fail(reason);
       });
     });
-    it('gets attachments', function(done) {
+
+    it('gets non-existent attachments', function(done) {
       var promise = doc.getAttachments();
       promise.then(function (data) {
         expect(data).toEqual(null);
@@ -496,6 +536,25 @@ describe('api', function() {
         done.fail(reason);
       });
     });
+    it('gets attachments', function(done) {
+      var url = new URL('../pdfs/bug766138.pdf', window.location).href;
+      var loadingTask = PDFJS.getDocument(url);
+      var promise = loadingTask.promise.then(function (pdfDoc) {
+        return pdfDoc.getAttachments();
+      });
+      promise.then(function (data) {
+        var attachment = data['Press Quality.joboptions'];
+        expect(attachment.filename).toEqual('Press Quality.joboptions');
+        expect(attachment.content instanceof Uint8Array).toBeTruthy();
+        expect(attachment.content.length).toEqual(30098);
+
+        loadingTask.destroy();
+        done();
+      }).catch(function (reason) {
+        done.fail(reason);
+      });
+    });
+
     it('gets javascript', function(done) {
       var promise = doc.getJavaScript();
       promise.then(function (data) {
@@ -570,6 +629,8 @@ describe('api', function() {
         expect(outlineItem.title).toEqual('Chapter 1');
         expect(outlineItem.dest instanceof Array).toEqual(true);
         expect(outlineItem.url).toEqual(null);
+        expect(outlineItem.unsafeUrl).toBeUndefined();
+        expect(outlineItem.newWindow).toBeUndefined();
 
         expect(outlineItem.bold).toEqual(true);
         expect(outlineItem.italic).toEqual(false);
@@ -594,7 +655,9 @@ describe('api', function() {
           var outlineItemTwo = outline[2];
           expect(typeof outlineItemTwo.title).toEqual('string');
           expect(outlineItemTwo.dest).toEqual(null);
-          expect(outlineItemTwo.url).toEqual('http://google.com');
+          expect(outlineItemTwo.url).toEqual('http://google.com/');
+          expect(outlineItemTwo.unsafeUrl).toEqual('http://google.com');
+          expect(outlineItemTwo.newWindow).toBeUndefined();
 
           var outlineItemOne = outline[1];
           expect(outlineItemOne.bold).toEqual(false);
@@ -706,6 +769,9 @@ describe('api', function() {
     it('gets ref', function () {
       expect(page.ref).toEqual({ num: 15, gen: 0 });
     });
+    it('gets userUnit', function () {
+      expect(page.userUnit).toEqual(1.0);
+    });
     it('gets view', function () {
       expect(page.view).toEqual([0, 0, 595.28, 841.89]);
     });
@@ -739,14 +805,78 @@ describe('api', function() {
         done.fail(reason);
       });
     });
+
+    it('gets annotations containing relative URLs (bug 766086)',
+        function (done) {
+      var url = new URL('../pdfs/bug766086.pdf', window.location).href;
+
+      var defaultLoadingTask = PDFJS.getDocument(url);
+      var defaultPromise = defaultLoadingTask.promise.then(function (pdfDoc) {
+        return pdfDoc.getPage(1).then(function (pdfPage) {
+          return pdfPage.getAnnotations();
+        });
+      });
+
+      var docBaseUrlLoadingTask = PDFJS.getDocument({
+        url: url,
+        docBaseUrl: 'http://www.example.com/test/pdfs/qwerty.pdf',
+      });
+      var docBaseUrlPromise = docBaseUrlLoadingTask.promise.then(
+          function (pdfDoc) {
+        return pdfDoc.getPage(1).then(function (pdfPage) {
+          return pdfPage.getAnnotations();
+        });
+      });
+
+      var invalidDocBaseUrlLoadingTask = PDFJS.getDocument({
+        url: url,
+        docBaseUrl: 'qwerty.pdf',
+      });
+      var invalidDocBaseUrlPromise = invalidDocBaseUrlLoadingTask.promise.then(
+          function (pdfDoc) {
+        return pdfDoc.getPage(1).then(function (pdfPage) {
+          return pdfPage.getAnnotations();
+        });
+      });
+
+      Promise.all([defaultPromise, docBaseUrlPromise,
+                   invalidDocBaseUrlPromise]).then(function (data) {
+        var defaultAnnotations = data[0];
+        var docBaseUrlAnnotations = data[1];
+        var invalidDocBaseUrlAnnotations = data[2];
+
+        expect(defaultAnnotations[0].url).toBeUndefined();
+        expect(defaultAnnotations[0].unsafeUrl).toEqual(
+          '../../0021/002156/215675E.pdf#nameddest=15');
+
+        expect(docBaseUrlAnnotations[0].url).toEqual(
+          'http://www.example.com/0021/002156/215675E.pdf#nameddest=15');
+        expect(docBaseUrlAnnotations[0].unsafeUrl).toEqual(
+          '../../0021/002156/215675E.pdf#nameddest=15');
+
+        expect(invalidDocBaseUrlAnnotations[0].url).toBeUndefined();
+        expect(invalidDocBaseUrlAnnotations[0].unsafeUrl).toEqual(
+          '../../0021/002156/215675E.pdf#nameddest=15');
+
+        defaultLoadingTask.destroy();
+        docBaseUrlLoadingTask.destroy();
+        invalidDocBaseUrlLoadingTask.destroy();
+        done();
+      }).catch(function (reason) {
+        done.fail(reason);
+      });
+    });
+
     it('gets text content', function (done) {
       var defaultPromise = page.getTextContent();
-      var normalizeWhitespacePromise = page.getTextContent({
-        normalizeWhitespace: true });
+      var parametersPromise = page.getTextContent({
+        normalizeWhitespace: true,
+        disableCombineTextItems: true,
+      });
 
       var promises = [
         defaultPromise,
-        normalizeWhitespacePromise
+        parametersPromise,
       ];
       Promise.all(promises).then(function (data) {
         expect(!!data[0].items).toEqual(true);

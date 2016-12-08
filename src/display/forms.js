@@ -8,14 +8,13 @@
     factory(exports, require('../shared/util.js'),
       require('../shared/global.js'));
   } else {
-    factory((root.pdfjsDisplayFormFunctionality = {}), root.pdfjsSharedUtil,
+    factory((root.pdfjsDisplayForms = {}), root.pdfjsSharedUtil,
       root.pdfjsSharedGlobal);
   }
 }(this, function (exports, sharedUtil, sharedGlobal) {
 
 var Util = sharedUtil.Util; // @IAG Replace PDFJS.Util calls with this
 var createPromiseCapability = sharedUtil.createPromiseCapability; // Maybe implement promises later
-var PDFJS = sharedGlobal.PDFJS;
 
 var FormFunctionality = (function FormFunctionalityClosure() {
 
@@ -54,7 +53,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
             throw 'Passed function must accept two arguments: itemProperties and viewport';
         }
     }
-						 
+
 	function assertValidControlTweak(closure) {
 		if (typeof(closure)!='function') {
 			throw "Passed item is not a function";
@@ -204,7 +203,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 
     function _getDisplayFieldProperties(item, viewport) {
         var fieldRect = viewport.convertToViewportRectangle(item.rect);
-        var rect = PDFJS.Util.normalizeRect(fieldRect);
+        var rect = Util.normalizeRect(fieldRect);
         return {
             x: Math.floor(rect[0]),
             y: Math.floor(rect[1]),
@@ -526,10 +525,10 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 
 					// If we created a control, add it to a position container, and then the domain
 					if (control) {
-						
+
 						// Do we want to perform any tweaks?
 						if (postCreationTweak) postCreationTweak(fieldType,fieldData.correctedId,control);
-						  
+
 						var container = getPositionContainer(fieldData, viewport);
 						container.appendChild(control);
 						fieldType = determineControlType(control);
@@ -601,7 +600,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
                 idClosureOverrides[id]=closure;
             }
         },
-						 
+
 		/**
 		 * Provide a function that will be given a chance to tweak a control after it is created (custom css, angular controls etc could be added here)
 		 * @param {function} postCallback A function with parameters 'filedType', 'elementId' and 'element' that will have chance to customize the field and return nothing
@@ -615,7 +614,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
          * @return {array} An array of values of the form elements in format [elementId]=value
          */
         getFormValues: function() {
-						 
+
 			// Process to visit each element in a set of them
 			var values = {};
 			var visitElements = function(set, action) {
@@ -625,7 +624,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 					if (element) action(elementId,element);
 				});
 			};
-			
+
 			// Visit each checkbox
 			visitElements(formFields[fieldTypes.CHECK_BOX],function(elementId,element) {
 				values[elementId] = element.checked ? true : false;
@@ -706,7 +705,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
             pageHolder.appendChild(canvas);
             canvas.height = viewport.height;
             canvas.width = viewport.width;
-						 
+
 			// Tweak canvas to support hi-dpi rendering (without affecting the form fields positioning)
 			var context = canvas.getContext('2d');
 			var devicePixelRatio = window.devicePixelRatio || 1;
@@ -721,7 +720,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 			canvas.width = canvas.width * ratio;
 			canvas.height = canvas.height * ratio;
 			if (postCreationTweak) postCreationTweak("CANVAS","canvas",canvas);
-						 
+
             //
             // Render PDF page into canvas context
             //
@@ -761,8 +760,6 @@ var FormFunctionality = (function FormFunctionalityClosure() {
         }
     }
 })();
-
-PDFJS.FormFunctionality = FormFunctionality;
 
 exports.FormFunctionality = FormFunctionality;
 }));
