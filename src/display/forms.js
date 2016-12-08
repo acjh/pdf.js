@@ -161,6 +161,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
         };
         if (item.fullName.indexOf('.`')!=-1) {
             prop.correctedId = item.fullName.substring(0,item.fullName.indexOf('.`'));
+            prop.groupingId = item.fullName.substring(item.fullName.indexOf('.`')+2);
             prop.isGroupMember = true;
         }
         else {
@@ -335,6 +336,8 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 		var control = document.createElement('input');
 		control.type = 'checkbox';
 		control.value = itemProperties.options[1];		// Checkboxes are often Off/Yes, however this is a custom field controlled by export_value
+        control.id = itemProperties.id;
+        control.name = itemProperties.id;
 		control.style.padding = '0';
 		control.style.margin = '0';
 		control.style.marginLeft = itemProperties.width/2-Math.ceil(4*viewport.scale)+'px';
@@ -349,6 +352,7 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 		var control = document.createElement('input');
 		control.type = 'radio';
 		control.value = itemProperties.options[1];		// Radio buttons have an Off/Yes style value, however Yes is usually a unique ID unless grouping is turned on
+        control.id = itemProperties.correctedId+'.'+itemProperties.groupingId;
 		control.name = itemProperties.correctedId;		// Name is used to group radio buttons
 		control.style.padding = '0';
 		control.style.margin = '0';
@@ -414,6 +418,8 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 			control.style.cursor = "not-allowed";
 		}
 		control.value = itemProperties.value;
+        control.id = itemProperties.id;
+        control.name = itemProperties.id;
 		return control;
 	};
 
@@ -424,6 +430,8 @@ var FormFunctionality = (function FormFunctionalityClosure() {
 		control.style.width = Math.floor(itemProperties.width-3) + 'px'; // small amount + borders
 		control.style.height = Math.floor(itemProperties.height) + 'px'; // small amount + borders
 		control.style.textAlign = itemProperties.textAlignment;
+        control.id = itemProperties.id;
+        control.name = itemProperties.id;
 		if (Math.floor(itemProperties.fontSizeControl)>=Math.floor(itemProperties.height-2)) {
 			control.style.fontSize = Math.floor(itemProperties.height-3) + 'px';
 		}
