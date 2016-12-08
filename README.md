@@ -80,7 +80,7 @@ in many scenarios, including scenarios where you wish to alter the basic nature 
 such as turning a text box for Country into a drop down.
 
 Depending on the source element type, the properties that define the element can vary. All
-elements will have the following properties defined. Note that all diplay type values are scales
+elements will have the following properties defined. Note that all diplay type values are scaled
 to the viewport:
 
 + id - The id of the item, coming from the fullName property in the source
@@ -158,6 +158,12 @@ controls from the base pdf.
 try to scale the actual control, but will center it in the space a scaled control would have occupied.
 If you wish to scale these controls, create your own control generation function as set it using
 setControlRenderClosureByType().
+
+## Learning
+
+You can see a basic example of how one might start using this library in:
+
++ [examples/forms/](https://github.com/mainegreen/pdf.js/blob/master/examples/forms/)
 
 ## >> END FORMS SPECIFIC README <<
 ## >> BEGIN BASIC PDF.JS README <<
