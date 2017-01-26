@@ -2,8 +2,6 @@
 <html>
 
 <head>
-  <script src="../../node_modules/requirejs/require.js"></script>
-
   <style>
   .pdfpage { position:relative; top: 0; left: 0; border: solid 1px black; margin: 10px; }
   .pdfpage > canvas { position: absolute; top: 0; left: 0; }
@@ -13,7 +11,12 @@
   .inputHint { opacity: 0.2; background: #ccc; position: absolute; }
   </style>
 
-  <script src="forms.js"></script>
+  <script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
+  <script>
+    $.getScript("https://raw.githubusercontent.com/requirejs/requirejs/master/require.js", function() {
+        $.getScript("forms.js");
+    });
+  </script>
 </head>
 
 <body>
