@@ -179,6 +179,6 @@ globalScope.FormsDemo = (function FormsFunctionalityClosure() {
 }).call((typeof window === 'undefined') ? this : window);
 
 window.onload = function(){
-    FormsDemo.loadPdf('target','/forms/f1040.pdf');
+    FormsDemo.loadPdf('target','f1040.pdf');
 
 };
