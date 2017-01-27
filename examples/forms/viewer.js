@@ -25,6 +25,6 @@ function showDataInRealTime() {
     });
 }
 
-$(document).ready(function() {
+$(window).load(function() {
     showDataInRealTime();
 });
