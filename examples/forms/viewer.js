@@ -1,12 +1,19 @@
 /*
- * Show updated data in 'div#info' on input
+ * Attach event handler to 'input' elements
  */
 function showDataInRealTime() {
     $('input').on('input', function() {
-        var data = {};
-		data[this.id] = this.value;
-        FormsDemo.dumpDataToDiv('info',data);
+        showData(this);
     });
+}
+
+/*
+ * Show data of element in 'div#info'
+ */
+function showData(element) {
+    var data = {};
+    data[element.id] = element.value;
+    FormsDemo.dumpDataToDiv('info', data);
 }
 
 $(document).ready(function() {
