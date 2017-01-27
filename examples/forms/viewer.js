@@ -12,15 +12,17 @@ function trimFieldNames(data) {
 }
 
 /*
- * Removes link for "Show me all the data!"
  * Show updated data in 'div#info' on input
  */
 function showDataInRealTime() {
-    $(':not(#pager) > a').remove();
-
     $('input').on('input', function() {
         var data = FormsDemo.getPdfData();
         data = trimFieldNames(data);
         FormsDemo.dumpDataToDiv('info',data);
     });
 }
+
+$(document).ready(function() {
+    // Remove link for "Show me all the data!"
+    $(':not(#pager) > a').remove();
+});
