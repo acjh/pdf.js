@@ -3152,6 +3152,7 @@
         var creationRoutine = idClosureOverrides[fieldData.correctedId] || genericClosureOverrides[fieldType] || defaultCreationRoutines[fieldType];
         var control = creationRoutine ? creationRoutine(fieldData, viewport) : undefined;
         if (control) {
+         control.id = fieldData.originalName;
          if (postCreationTweak)
           postCreationTweak(fieldType, fieldData.correctedId, control);
          var container = getPositionContainer(fieldData, viewport);
