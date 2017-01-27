@@ -3,20 +3,23 @@
  */
 function showDataInRealTime() {
     var input = $('input');
+    var string = '';
     input.mousedown(function() {
-        showData(this);
+        string = '' + this.id;
+        dumpStringToDivInfo(string);
     });
     input.mouseup(function() {
-        showData(this);
+        string = '' + this.id;
+        dumpStringToDivInfo(string);
     });
 }
 
 /*
- * Show data of element in 'div#info'
+ * Dump string to 'div#info'
  */
-function showData(element) {
+function dumpStringToDivInfo(string) {
     var data = {};
-    data[element.id] = element.value;
+    data[string] = '';
     FormsDemo.dumpDataToDiv('info', data);
 }
 
