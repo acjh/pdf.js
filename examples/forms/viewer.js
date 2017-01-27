@@ -1,8 +1,8 @@
 /*
- * Attach event handler to 'input' elements
+ * Attach event handler to form field elements
  */
 function showDataInRealTime() {
-    var input = $('input');
+    var input = $('input, select, textarea');
     var string = '';
     input.mousedown(function() {
         string = '' + this.id;
