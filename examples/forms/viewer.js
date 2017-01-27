@@ -24,7 +24,3 @@ function showDataInRealTime() {
         FormsDemo.dumpDataToDiv('info',data);
     });
 }
-
-$(window).load(function() {
-    showDataInRealTime();
-});
