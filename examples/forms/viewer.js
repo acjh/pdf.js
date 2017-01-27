@@ -2,7 +2,11 @@
  * Attach event handler to 'input' elements
  */
 function showDataInRealTime() {
-    $('input').on('input', function() {
+    var input = $('input');
+    input.mousedown(function() {
+        showData(this);
+    });
+    input.mouseup(function() {
         showData(this);
     });
 }
