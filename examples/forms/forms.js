@@ -77,7 +77,7 @@ globalScope.FormsDemo = (function FormsFunctionalityClosure() {
                     // Using promise to fetch the page
                     pdfObject.getPage(1).then(function(page) {
                         PDFJS.FormFunctionality.render(width,false,page,docTarget,true,data);
-                        $.setTimeout(showDataInRealTime, 2000);
+                        setTimeout(showDataInRealTime, 2000);
                     });
                 });
                 return true;
@@ -154,7 +154,7 @@ globalScope.FormsDemo = (function FormsFunctionalityClosure() {
                 pdfObject.getPage(pageNumber).then(function(page) {
                     //PDFJS.FormFunctionality.render(300,300,page,target,true,{'LOST_TIME':true,'MEDICAL_HEALTH_CARE':false, 'Other': 'THIS IS VALUE','RADIO1':'1', 'STATES':'ME'});
                     PDFJS.FormFunctionality.render(width,false,page,docTarget,true,data);
-                    $.setTimeout(showDataInRealTime, 2000);
+                    setTimeout(showDataInRealTime, 2000);
                     currentPage=pageNumber;
                 });
                 return true;
