@@ -9,7 +9,10 @@ function showDataInRealTime() {
         dumpStringToDivInfo(string);
     });
     input.mouseup(function() {
-        string = string + ' -> ' + this.id;
+        var current = this.id;
+        if (current != string) {
+            string += ' -> ' + current;
+        }
         dumpStringToDivInfo(string);
     });
 }
